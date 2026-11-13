@@ -46,6 +46,11 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Some published Expo module versions omit `publication.version`, which makes
+      # Expo's Gradle autolinking plugin fail to deserialise the config. Fill it in.
+      - name: Patch expo module configs
+        run: npm run patch-modules
+
       - name: Typecheck
         run: npm run typecheck
 
