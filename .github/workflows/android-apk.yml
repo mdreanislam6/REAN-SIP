@@ -42,7 +42,6 @@ jobs:
           echo "Using SDK at $SDK"
           ls "$SDK" || true
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          echo "sdk.dir=$SDK" > /tmp/sdkdir.txt
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -60,7 +59,8 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/gradle.log
 
       - name: Collect APK
         run: |
@@ -75,7 +75,16 @@ jobs:
           path: out/rean-sip.apk
           retention-days: 30
 
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log
+          path: /tmp/gradle.log
+          retention-days: 7
+
       - name: Publish APK to GitHub Release
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-${{ github.run_number }}
