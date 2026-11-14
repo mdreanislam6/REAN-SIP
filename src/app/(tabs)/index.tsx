@@ -1,229 +1,165 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Screen } from '@/components/screen';
-import { StatusPill } from '@/components/status-pill';
-import { Button, Card, EmptyState } from '@/components/ui';
-import { radius, spacing, useColors } from '@/constants/theme';
-import { formatNumber } from '@/lib/format';
-import { useSip } from '@/lib/sip-context';
+import { Icon } from '@/components/icon';
+import { Avatar, Badge, Empty, IconButton, Tabs } from '@/components/kit';
+import { useApp, type CallRow } from '@/lib/app-state';
 
-const KEYS: { digit: string; letters?: string }[][] = [
-  [
-    { digit: '1' },
-    { digit: '2', letters: 'ABC' },
-    { digit: '3', letters: 'DEF' },
-  ],
-  [
-    { digit: '4', letters: 'GHI' },
-    { digit: '5', letters: 'JKL' },
-    { digit: '6', letters: 'MNO' },
-  ],
-  [
-    { digit: '7', letters: 'PQRS' },
-    { digit: '8', letters: 'TUV' },
-    { digit: '9', letters: 'WXYZ' },
-  ],
-  [{ digit: '*' }, { digit: '0', letters: '+' }, { digit: '#' }],
-];
+type Filter = 'all' | 'missed' | 'spam' | 'fav';
 
-export default function DialerScreen() {
-  const colors = useColors();
+export default function CallsScreen() {
+  const { colors, data, contactById } = useApp();
   const router = useRouter();
-  const { accounts, activeAccount, registration, registrationDetail, dial, contacts, call } = useSip();
-  const [number, setNumber] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
 
-  const match = useMemo(() => {
-    const digits = number.replace(/\D/g, '');
-    if (digits.length < 3) return null;
-    return contacts.find((c) => c.number.replace(/\D/g, '').endsWith(digits)) ?? null;
-  }, [number, contacts]);
+  const rows = useMemo(() => {
+    return data.calls.filter((c) => {
+      const ct = contactById(c.cid);
+      if (filter === 'missed') return c.missed;
+      if (filter === 'spam') return ct.spam;
+      if (filter === 'fav') return ct.fav;
+      return true;
+    });
+  }, [data.calls, filter, contactById]);
 
-  const canCall = number.trim().length > 0 && registration === 'registered' && !call;
-
-  const press = (digit: string) => {
-    setNumber((prev) => (prev.length >= 24 ? prev : prev + digit));
-  };
-
-  const backspace = () => setNumber((prev) => prev.slice(0, -1));
-
-  const placeCall = () => {
-    if (!canCall) return;
-    dial(number.trim(), match?.name);
-  };
-
-  if (accounts.length === 0) {
+  const renderRow = ({ item }: { item: CallRow }) => {
+    const ct = contactById(item.cid);
+    const typeIcon = item.type === 'miss' ? 'phoneMissed' : item.type === 'out' ? 'phoneOut' : 'phoneIn';
+    const typeColor = item.missed ? colors.red : item.type === 'out' ? colors.text2 : colors.green;
     return (
-      <Screen>
-        <EmptyState
-          icon="call-outline"
-          title="Add a SIP account to start calling"
-          message="REAN SIP connects to any SIP server you have credentials for. Add your server, username and password once — then dial from here."
-          actionTitle="Add SIP account"
-          onAction={() => router.push('/account/new')}
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push({ pathname: '/call', params: { cid: String(ct.id) } })}
+        style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surf }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${ct.name}`}
+          onPress={() => router.push({ pathname: '/contact/[id]', params: { id: String(ct.id) } })}
+          hitSlop={4}>
+          <Avatar letter={ct.letter} c={ct.c} spam={ct.spam} />
+        </Pressable>
+        <View style={styles.flex}>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, { color: item.missed ? colors.red : colors.text }]} numberOfLines={1}>
+              {ct.name}
+            </Text>
+            {ct.verified ? <Icon name="verified" size={13} color={colors.accent} /> : null}
+            {ct.spam ? <Badge label="SPAM" tone="r" /> : null}
+          </View>
+          <View style={styles.metaRow}>
+            <Icon name={typeIcon} size={12} color={typeColor} />
+            <Text style={[styles.meta, { color: colors.text2 }]} numberOfLines={1}>
+              {item.time} · {item.dur}
+            </Text>
+          </View>
+        </View>
+        <IconButton
+          name="phone"
+          size={19}
+          color={colors.accent}
+          onPress={() => router.push({ pathname: '/call', params: { cid: String(ct.id) } })}
         />
-      </Screen>
+      </Pressable>
     );
-  }
+  };
 
   return (
-    <Screen scroll={false}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.root, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Choose SIP account"
-          onPress={() => router.push('/(tabs)/settings')}
-          style={({ pressed }) => [pressed && { opacity: 0.6 }]}>
-          <StatusPill
-            state={registration}
-            label={
-              registration === 'registered'
-                ? (activeAccount?.label ?? 'Registered')
-                : registration === 'failed'
-                  ? 'Registration failed'
-                  : undefined
-            }
-          />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Diagnostics"
-          onPress={() => router.push('/diagnostics')}
-          style={({ pressed }) => [pressed && { opacity: 0.6 }]}>
-          <Ionicons name="pulse-outline" size={22} color={colors.muted} />
-        </Pressable>
-      </View>
-
-      {registration === 'failed' && registrationDetail ? (
-        <Card style={{ borderColor: colors.danger }}>
-          <Text style={[styles.errorTitle, { color: colors.danger }]}>Could not register</Text>
-          <Text style={[styles.errorBody, { color: colors.muted }]}>{registrationDetail}</Text>
-          <Button
-            title="Check account settings"
-            variant="secondary"
-            icon="settings-outline"
-            onPress={() => router.push('/(tabs)/settings')}
-          />
-        </Card>
-      ) : null}
-
-      <View style={styles.display}>
-        <Text
-          style={[styles.number, { color: number ? colors.text : colors.muted }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit>
-          {number ? formatNumber(number) : 'Enter a number'}
-        </Text>
-        {match ? (
-          <Text style={[styles.match, { color: colors.primary }]} numberOfLines={1}>
-            {match.name}
-          </Text>
-        ) : (
-          <Text style={[styles.match, { color: colors.muted }]}>
-            {registration === 'registered'
-              ? `via ${activeAccount?.label ?? 'SIP'}`
-              : registration === 'connecting'
-                ? 'Connecting to server…'
-                : 'Not registered'}
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.keypad}>
-        {KEYS.map((row) => (
-          <View key={row.map((k) => k.digit).join('')} style={styles.keyRow}>
-            {row.map((key) => (
-              <Pressable
-                key={key.digit}
-                accessibilityRole="button"
-                accessibilityLabel={key.digit}
-                onPress={() => press(key.digit)}
-                onLongPress={() => key.digit === '0' && press('+')}
-                style={({ pressed }) => [
-                  styles.key,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                  pressed && { backgroundColor: colors.primarySoft },
-                ]}>
-                <Text style={[styles.keyDigit, { color: colors.text }]}>{key.digit}</Text>
-                {key.letters ? (
-                  <Text style={[styles.keyLetters, { color: colors.muted }]}>{key.letters}</Text>
-                ) : null}
-              </Pressable>
-            ))}
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.actions}>
-        <View style={styles.actionSlot} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Call"
-          disabled={!canCall}
-          onPress={placeCall}
-          style={({ pressed }) => [
-            styles.callButton,
-            { backgroundColor: canCall ? colors.success : colors.border },
-            pressed && { opacity: 0.8 },
-          ]}>
-          <Ionicons name="call" size={30} color="#fff" />
-        </Pressable>
-        <View style={styles.actionSlot}>
-          {number.length > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete last digit"
-              onPress={backspace}
-              onLongPress={() => setNumber('')}
-              style={({ pressed }) => [styles.backspace, pressed && { opacity: 0.5 }]}>
-              <Ionicons name="backspace-outline" size={26} color={colors.muted} />
-            </Pressable>
-          ) : null}
+        <View style={styles.headRow}>
+          <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Open profile">
+            <Avatar letter={data.profile.name.charAt(0)} c="c1" size={40} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Calls</Text>
+          <IconButton name="search" onPress={() => router.push('/search')} />
+          <IconButton name="more" onPress={() => router.push('/settings')} />
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/sip')}
+          style={({ pressed }) => [
+            styles.sipChip,
+            { backgroundColor: data.sip.online ? colors.greenSoft : colors.redSoft },
+            pressed && { opacity: 0.7 },
+          ]}>
+          <View style={[styles.dot, { backgroundColor: data.sip.online ? colors.green : colors.red }]} />
+          <Text style={[styles.sipText, { color: data.sip.online ? colors.green : colors.red }]}>
+            {data.sip.online ? 'SIP Online' : 'SIP Offline'}
+          </Text>
+          <Icon name="chevron" size={13} color={data.sip.online ? colors.green : colors.red} />
+        </Pressable>
+
+        <Tabs
+          value={filter}
+          onChange={setFilter}
+          items={[
+            { id: 'all', label: 'All' },
+            { id: 'missed', label: 'Missed' },
+            { id: 'spam', label: 'Spam' },
+            { id: 'fav', label: 'Favorites' },
+          ]}
+        />
       </View>
-    </Screen>
+
+      <FlatList
+        data={rows}
+        keyExtractor={(item, i) => `${item.cid}-${i}`}
+        renderItem={renderRow}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={<Empty icon="phone" title="No calls here" sub="Calls that match this filter will appear here." />}
+      />
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open keypad"
+        onPress={() => router.push('/dialer')}
+        style={({ pressed }) => [styles.fab, { backgroundColor: colors.accent }, pressed && { transform: [{ scale: 0.94 }] }]}>
+        <Icon name="keypad" size={25} color="#FFFFFF" />
+      </Pressable>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
+  root: { flex: 1 },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: 12, paddingTop: 4, gap: 10 },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { flex: 1, fontSize: 26, fontWeight: '800', letterSpacing: -0.6, marginLeft: 4 },
+  sipChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.sm,
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginLeft: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
-  errorTitle: { fontSize: 15, fontWeight: '700' },
-  errorBody: { fontSize: 13, lineHeight: 19 },
-  display: { alignItems: 'center', gap: 4, paddingVertical: spacing.md, minHeight: 96 },
-  number: { fontSize: 34, fontWeight: '600', letterSpacing: 0.5 },
-  match: { fontSize: 14, fontWeight: '500' },
-  keypad: { flex: 1, justifyContent: 'center', gap: spacing.sm },
-  keyRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md },
-  key: {
-    width: 78,
-    height: 62,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  sipText: { fontSize: 12, fontWeight: '800' },
+  list: { paddingTop: 8, paddingBottom: 110 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 11 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  name: { fontSize: 15, fontWeight: '700', maxWidth: '72%' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
+  meta: { fontSize: 12.5 },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
-  keyDigit: { fontSize: 26, fontWeight: '600' },
-  keyLetters: { fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginTop: -2 },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-  },
-  actionSlot: { width: 72, alignItems: 'center' },
-  callButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backspace: { padding: spacing.sm },
 });

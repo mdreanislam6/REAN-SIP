@@ -1,153 +1,127 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Screen } from '@/components/screen';
-import { EmptyState, TextField } from '@/components/ui';
-import { radius, spacing, useColors } from '@/constants/theme';
-import { avatarColor, initials } from '@/lib/format';
-import { useSip } from '@/lib/sip-context';
-import type { Contact } from '@/lib/sip/types';
+import { Icon } from '@/components/icon';
+import { Avatar, Empty, IconButton, SectionTitle } from '@/components/kit';
+import { useApp, type Contact } from '@/lib/app-state';
 
 export default function ContactsScreen() {
-  const colors = useColors();
+  const { colors, data, toast } = useApp();
   const router = useRouter();
-  const { contacts, dial, registration } = useSip();
-  const [query, setQuery] = useState('');
+  const [q, setQ] = useState('');
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = q
-      ? contacts.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.number.toLowerCase().includes(q) ||
-            (c.company ?? '').toLowerCase().includes(q),
-        )
-      : contacts;
-    return [...list].sort((a, b) => {
-      if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [contacts, query]);
+    const needle = q.trim().toLowerCase();
+    if (!needle) return data.contacts;
+    return data.contacts.filter((c) => c.name.toLowerCase().includes(needle) || c.num.includes(needle));
+  }, [data.contacts, q]);
 
-  const renderItem = ({ item }: { item: Contact }) => (
+  const favorites = filtered.filter((c) => c.fav);
+  const all = filtered;
+
+  const openDetail = (c: Contact) => router.push({ pathname: '/contact/[id]', params: { id: String(c.id) } });
+  const call = (c: Contact) => router.push({ pathname: '/call', params: { cid: String(c.id) } });
+
+  const ContactRow = ({ c }: { c: Contact }) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open ${item.name}`}
-      onPress={() => router.push(`/contact/${item.id}`)}
-      style={({ pressed }) => [
-        styles.row,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        pressed && { opacity: 0.7 },
-      ]}>
-      <View style={[styles.avatar, { backgroundColor: avatarColor(item.name) }]}>
-        <Text style={styles.avatarText}>{initials(item.name)}</Text>
-      </View>
-      <View style={styles.body}>
+      onPress={() => call(c)}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surf }]}>
+      <Pressable onPress={() => openDetail(c)} accessibilityRole="button" accessibilityLabel={`Open ${c.name}`} hitSlop={4}>
+        <Avatar letter={c.letter} c={c.c} spam={c.spam} size={42} />
+      </Pressable>
+      <View style={styles.flex}>
         <View style={styles.nameRow}>
           <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
+            {c.name}
           </Text>
-          {item.favorite ? <Ionicons name="star" size={13} color={colors.warning} /> : null}
-          {item.blocked ? <Ionicons name="ban" size={13} color={colors.danger} /> : null}
+          {c.verified ? <Icon name="verified" size={12} color={colors.accent} /> : null}
         </View>
-        <Text style={[styles.meta, { color: colors.muted }]} numberOfLines={1}>
-          {item.number}
-          {item.company ? ` · ${item.company}` : ''}
-        </Text>
+        <Text style={[styles.num, { color: colors.text2 }]}>{c.num}</Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Call ${item.name}`}
-        disabled={item.blocked || registration !== 'registered'}
-        onPress={() => dial(item.number, item.name)}
-        hitSlop={8}
-        style={({ pressed }) => [styles.callIcon, pressed && { opacity: 0.5 }]}>
-        <Ionicons
-          name="call"
-          size={20}
-          color={item.blocked || registration !== 'registered' ? colors.border : colors.primary}
-        />
-      </Pressable>
+      <IconButton name="phone" size={18} color={colors.accent} onPress={() => call(c)} />
     </Pressable>
   );
 
   return (
-    <Screen scroll={false}>
-      <View style={styles.top}>
-        <View style={styles.searchWrap}>
-          <TextField
-            label="Search"
-            placeholder="Name, number or company"
-            value={query}
-            onChangeText={setQuery}
-            autoCorrect={false}
-            returnKeyType="search"
-          />
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.root, { backgroundColor: colors.bg }]}>
+      <View style={styles.header}>
+        <View style={styles.headRow}>
+          <View style={styles.flex}>
+            <Text style={[styles.title, { color: colors.text }]}>Contacts</Text>
+            <Text style={[styles.sub, { color: colors.text2 }]}>
+              {data.contacts.length} contacts · {favorites.length} favorites
+            </Text>
+          </View>
+          <IconButton name="plus" onPress={() => toast('Add contact form opened')} />
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add contact"
-          onPress={() => router.push('/contact/new')}
-          style={({ pressed }) => [
-            styles.addButton,
-            { backgroundColor: colors.primary },
-            pressed && { opacity: 0.8 },
-          ]}>
-          <Ionicons name="add" size={24} color={colors.onPrimary} />
-        </Pressable>
+        <View style={[styles.search, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Icon name="search" size={17} color={colors.text3} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search contacts"
+            placeholderTextColor={colors.text3}
+            style={[styles.searchInput, { color: colors.text }]}
+          />
+          {q ? <IconButton name="x" size={16} onPress={() => setQ('')} /> : null}
+        </View>
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        ListEmptyComponent={
-          <EmptyState
-            icon="people-outline"
-            title={query ? 'No matching contacts' : 'No contacts yet'}
-            message={
-              query
-                ? 'Try a different name or number.'
-                : 'Save the people you call most. Contacts stay on this phone.'
-            }
-            actionTitle={query ? undefined : 'Add contact'}
-            onAction={query ? undefined : () => router.push('/contact/new')}
-          />
-        }
-      />
-    </Screen>
+      <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        {favorites.length > 0 ? (
+          <>
+            <SectionTitle>Favorites</SectionTitle>
+            <View style={styles.favWrap}>
+              {favorites.map((c) => (
+                <Pressable key={c.id} onPress={() => openDetail(c)} style={styles.favItem} accessibilityRole="button">
+                  <Avatar letter={c.letter} c={c.c} size={52} />
+                  <Text style={[styles.favName, { color: colors.text }]} numberOfLines={1}>
+                    {c.name.split(' ')[0]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        <SectionTitle>All contacts</SectionTitle>
+        {all.length === 0 ? (
+          <Empty icon="users" title="No contacts found" sub="Try a different name or number." />
+        ) : (
+          all.map((c) => <ContactRow key={c.id} c={c} />)
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  top: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingTop: spacing.sm },
-  searchWrap: { flex: 1 },
-  addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  list: { paddingVertical: spacing.md, flexGrow: 1 },
-  row: {
+  root: { flex: 1 },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: 12, paddingTop: 4, gap: 10 },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 4 },
+  title: { fontSize: 26, fontWeight: '800', letterSpacing: -0.6 },
+  sub: { fontSize: 12.5, marginTop: 1 },
+  search: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+    marginHorizontal: 4,
+    paddingHorizontal: 12,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  body: { flex: 1, gap: 3 },
+  searchInput: { flex: 1, fontSize: 14.5, paddingVertical: 0 },
+  list: { paddingBottom: 28 },
+  favWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, paddingHorizontal: 20, paddingBottom: 6 },
+  favItem: { alignItems: 'center', gap: 5, width: 62 },
+  favName: { fontSize: 11.5, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 9 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  name: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
-  meta: { fontSize: 13 },
-  callIcon: { padding: spacing.xs },
+  name: { fontSize: 14.5, fontWeight: '700', maxWidth: '80%' },
+  num: { fontSize: 12, marginTop: 2 },
 });
