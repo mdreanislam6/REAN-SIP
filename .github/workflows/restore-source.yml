@@ -1,0 +1,44 @@
+name: Restore CallerX source
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: restore-source
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    name: Unpack source archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore files from staged archive
+        run: |
+          set -euo pipefail
+          if [ ! -f blob/READY ]; then
+            echo "No READY marker in blob/ - nothing to restore. Exiting cleanly."
+            exit 0
+          fi
+          echo "Reassembling archive..."
+          cat blob/c1.b64 blob/c2.b64 blob/c3.b64 blob/c4.b64 blob/c5.b64 blob/c6.b64 | tr -d '\n' > /tmp/source.b64
+          base64 -d /tmp/source.b64 > /tmp/source.tar.gz
+          echo "Checking integrity..."
+          echo "23ff39c5918f241f8097471342743c15d90683c3a27a67c0199ffc88c9c54a1c  /tmp/source.tar.gz" | sha256sum -c -
+          echo "Extracting..."
+          tar xzf /tmp/source.tar.gz -C .
+          rm -rf blob
+          git config user.name "mdreanislam6"
+          git config user.email "mdreanislam6@gmail.com"
+          git add -A
+          git commit -m "feat(callerx): native Android app source - all screens"
+          git push origin HEAD:main
