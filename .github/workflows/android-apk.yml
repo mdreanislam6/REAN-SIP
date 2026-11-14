@@ -17,64 +17,25 @@ env:
   SOURCE_SHA256: d6a6d77266f8c88fdef242b906aa6135e7f0e0aabfb642899e8c0d8cfad0cb4b
 
 jobs:
-  # ------------------------------------------------------------------ restore
-  # The CallerX source ships as a compressed archive. This job unpacks it into
-  # the repository once, so the repo holds real, readable source files.
-  restore:
-    name: Restore source
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Is the source already in place?
-        id: check
-        run: |
-          if [ -f src/app/call.tsx ] && [ -f src/components/kit.tsx ]; then
-            echo "restored=false" >> "$GITHUB_OUTPUT"
-            echo "Source already present - skipping restore."
-          else
-            echo "restored=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download and unpack the source archive
-        if: steps.check.outputs.restored == 'true'
-        run: |
-          set -euo pipefail
-          curl -fsSL --retry 3 --retry-delay 5 "$SOURCE_ARCHIVE" -o /tmp/src.tar.xz
-          echo "$SOURCE_SHA256  /tmp/src.tar.xz" | sha256sum -c -
-          rm -rf src scripts assets blob
-          rm -f app.json package.json tsconfig.json eas.json README.md BUILD_GUIDE.md .env.example
-          tar xf /tmp/src.tar.xz -C .
-          echo "--- restored tree ---"
-          find src -type f | sort
-
-      - name: Commit the restored source
-        if: steps.check.outputs.restored == 'true'
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "Nothing to commit."
-          else
-            git commit -m "feat(callerx): native Android app source (all screens)"
-            git push origin HEAD:main
-          fi
-
-  # -------------------------------------------------------------------- build
   build:
     name: Build APK
-    needs: restore
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
+
+      # The CallerX source ships as a compressed archive. Unpack it over the
+      # checkout so the build always uses the current app source.
+      - name: Unpack CallerX source
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 5 "$SOURCE_ARCHIVE" -o /tmp/src.tar.xz
+          echo "$SOURCE_SHA256  /tmp/src.tar.xz" | sha256sum -c -
+          rm -rf src scripts assets
+          rm -f app.json package.json tsconfig.json eas.json README.md BUILD_GUIDE.md .env.example
+          tar xf /tmp/src.tar.xz -C .
+          echo "--- source tree ---"
+          find src -type f | sort
 
       - name: Setup Node
         uses: actions/setup-node@v4
