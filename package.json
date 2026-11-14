@@ -1,5 +1,5 @@
 {
-  "name": "rean-sip",
+  "name": "callerx",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "private": true,
@@ -8,18 +8,16 @@
     "android": "expo start --android",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "assets": "node scripts/make-assets.js",
-    "patch-modules": "node scripts/patch-expo-modules.js"
+    "assets": "node scripts/make-assets.js"
   },
   "dependencies": {
-    "@config-plugins/react-native-webrtc": "15.0.2",
     "@expo/vector-icons": "15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "57.0.33",
-    "expo-audio": "57.0.5",
     "expo-constants": "57.0.24",
     "expo-font": "57.0.4",
     "expo-image": "57.0.5",
+    "expo-linear-gradient": "~57.0.2",
     "expo-linking": "57.0.14",
     "expo-router": "57.0.31",
     "expo-splash-screen": "57.0.11",
@@ -30,8 +28,8 @@
     "react-native": "0.86.3",
     "react-native-safe-area-context": "5.7.0",
     "react-native-screens": "4.26.2",
-    "react-native-web": "0.21.4",
-    "react-native-webrtc": "155.0.1"
+    "react-native-svg": "15.15.4",
+    "react-native-web": "0.21.4"
   },
   "devDependencies": {
     "@types/react": "19.2.2",

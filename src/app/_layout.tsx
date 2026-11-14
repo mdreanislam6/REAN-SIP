@@ -1,38 +1,54 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
+import { View } from 'react-native';
 
-import { CallOverlay } from '@/components/call-overlay';
-import { useCallAlerts } from '@/hooks/use-call-alerts';
-import { SipProvider } from '@/lib/sip-context';
+import { Toast } from '@/components/kit';
+import { AppProvider, useApp } from '@/lib/app-state';
 
-function AppShell() {
-  useCallAlerts();
+function Shell() {
+  const { colors } = useApp();
   return (
-    <>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="account/[id]" options={{ title: 'SIP account' }} />
-        <Stack.Screen name="account/new" options={{ title: 'New SIP account' }} />
-        <Stack.Screen name="contact/[id]" options={{ title: 'Contact' }} />
-        <Stack.Screen name="contact/new" options={{ title: 'New contact' }} />
-        <Stack.Screen name="diagnostics" options={{ title: 'Diagnostics' }} />
-        <Stack.Screen name="+not-found" options={{ title: 'Not found' }} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar style={colors.isDark ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.bg },
+          animation: 'slide_from_right',
+        }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="permissions" options={{ animation: 'fade' }} />
+        <Stack.Screen name="dialer" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="call" options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="after-call" options={{ animation: 'fade' }} />
+        <Stack.Screen name="contact/[id]" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="edit-profile" />
+        <Stack.Screen name="theme" />
+        <Stack.Screen name="sip" />
+        <Stack.Screen name="sip-guide" />
+        <Stack.Screen name="voip-security" />
+        <Stack.Screen name="voip-best" />
+        <Stack.Screen name="search" />
+        <Stack.Screen name="blocklist" />
+        <Stack.Screen name="recordings" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="family" />
+        <Stack.Screen name="business" />
+        <Stack.Screen name="devices" />
+        <Stack.Screen name="backup" />
+        <Stack.Screen name="premium" />
+        <Stack.Screen name="who" />
       </Stack>
-      <CallOverlay />
-    </>
+      <Toast />
+    </View>
   );
 }
 
 export default function RootLayout() {
-  const scheme = useColorScheme();
   return (
-    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <SipProvider>
-        <AppShell />
-      </SipProvider>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <AppProvider>
+      <Shell />
+    </AppProvider>
   );
 }

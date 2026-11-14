@@ -10,9 +10,6 @@ type Updater<T> = (prev: T) => T;
  * key. A change made before the stored value has loaded is kept and applied on top of it
  * once it arrives, so nothing typed during loading is lost or overwritten. Nothing is
  * written after a failed load, so a read error cannot wipe the user's data.
- *
- *   const [items, setItems, status] = usePersistentState<Item[]>('items', []);
- *   if (status === 'loading') return <ActivityIndicator />;
  */
 export function usePersistentState<T>(
   key: string,
