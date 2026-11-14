@@ -13,12 +13,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA256: 0cff6844307bf186082d36486f30dd757d53846bebbe76a928fc409cf16e97a6
+  SOURCE_ARCHIVE: https://d.uguu.se/yWKHNcLfvhYB.xz
+  SOURCE_SHA256: d6a6d77266f8c88fdef242b906aa6135e7f0e0aabfb642899e8c0d8cfad0cb4b
 
 jobs:
   # ------------------------------------------------------------------ restore
-  # The CallerX source ships as a compressed archive split into base64 chunks
-  # under blob/. This job reassembles it and commits the real source files once.
+  # The CallerX source ships as a compressed archive. This job unpacks it into
+  # the repository once, so the repo holds real, readable source files.
   restore:
     name: Restore source
     runs-on: ubuntu-latest
@@ -38,13 +39,11 @@ jobs:
             echo "restored=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Reassemble and unpack the source archive
+      - name: Download and unpack the source archive
         if: steps.check.outputs.restored == 'true'
         run: |
           set -euo pipefail
-          ls -l blob/
-          cat blob/e*.b64 | tr -d '\n' > /tmp/src.b64
-          base64 -d /tmp/src.b64 > /tmp/src.tar.xz
+          curl -fsSL --retry 3 --retry-delay 5 "$SOURCE_ARCHIVE" -o /tmp/src.tar.xz
           echo "$SOURCE_SHA256  /tmp/src.tar.xz" | sha256sum -c -
           rm -rf src scripts assets blob
           rm -f app.json package.json tsconfig.json eas.json README.md BUILD_GUIDE.md .env.example
