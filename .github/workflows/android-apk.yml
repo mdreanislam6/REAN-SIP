@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build CallerX APK
 
 on:
   push:
@@ -9,17 +9,76 @@ permissions:
   contents: write
 
 concurrency:
-  group: apk-${{ github.ref }}
-  cancel-in-progress: true
+  group: callerx-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_ARCHIVE: https://static.teamily.ai/sites/f67fa6a6-f943-4580-9e27-73d3867baced/documents/callerx-native/callerx-source.tar.xz
+  SOURCE_SHA256: d6a6d77266f8c88fdef242b906aa6135e7f0e0aabfb642899e8c0d8cfad0cb4b
 
 jobs:
+  # ------------------------------------------------------------------ restore
+  # The CallerX source is delivered as a compressed archive. This job unpacks it
+  # into the repository once, so the repo holds real, readable source files.
+  restore:
+    name: Restore source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      restored: ${{ steps.check.outputs.restored }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Is the source already in place?
+        id: check
+        run: |
+          if [ -f src/app/call.tsx ] && [ -f src/components/kit.tsx ]; then
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            echo "Source already present - skipping restore."
+          else
+            echo "restored=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download and unpack the source archive
+        if: steps.check.outputs.restored == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL "$SOURCE_ARCHIVE" -o /tmp/src.tar.xz
+          echo "$SOURCE_SHA256  /tmp/src.tar.xz" | sha256sum -c -
+          # Drop the previous app so no stale file survives the swap.
+          rm -rf src scripts assets blob
+          rm -f app.json package.json package-lock.json tsconfig.json eas.json \
+                README.md BUILD_GUIDE.md .env.example
+          tar xf /tmp/src.tar.xz -C .
+          echo "--- restored tree ---"
+          find src -type f | sort | head -50
+
+      - name: Commit the restored source
+        if: steps.check.outputs.restored == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "feat(callerx): native Android app source (all screens)"
+            git push origin HEAD:main
+          fi
+
+  # -------------------------------------------------------------------- build
   build:
     name: Build APK
+    needs: restore
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 80
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -32,24 +91,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # The ubuntu-latest image already ships the Android SDK; just point Gradle at it
-      # and accept the licences so the build does not stop on a prompt.
       - name: Prepare Android SDK
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" >> "$GITHUB_ENV"
           SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "Using SDK at $SDK"
           ls "$SDK" || true
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      # Some published Expo module versions omit `publication.version`, which makes
-      # Expo's Gradle autolinking plugin fail to deserialise the config. Fill it in.
-      - name: Patch expo module configs
-        run: npm run patch-modules
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
@@ -70,14 +122,14 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p out
-          find android/app/build/outputs/apk -name "*.apk" -exec cp {} out/rean-sip.apk \;
+          find android/app/build/outputs/apk -name "*.apk" -exec cp {} out/callerx.apk \;
           ls -lh out/
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rean-sip-apk
-          path: out/rean-sip.apk
+          name: callerx-apk
+          path: out/callerx.apk
           retention-days: 30
 
       - name: Upload build log on failure
@@ -92,10 +144,10 @@ jobs:
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apk-${{ github.run_number }}
-          name: REAN SIP APK build ${{ github.run_number }}
+          tag_name: callerx-${{ github.run_number }}
+          name: CallerX APK build ${{ github.run_number }}
           body: |
             Automatic APK build from commit ${{ github.sha }}.
-            Download `rean-sip.apk` below and install it on an Android phone.
-          files: out/rean-sip.apk
+            Download `callerx.apk` below and install it on an Android phone.
+          files: out/callerx.apk
           make_latest: true
